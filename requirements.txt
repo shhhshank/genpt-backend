@@ -7,3 +7,4 @@ pymongo
 flask-pymongo
 flask-cors
 sentence-transformers
+pdfplumber
