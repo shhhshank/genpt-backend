@@ -8,3 +8,4 @@ flask-pymongo
 flask-cors
 sentence-transformers
 pdfplumber
+faiss-cpu
