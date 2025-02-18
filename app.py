@@ -4,13 +4,16 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 import os
 import time
+import asyncio
 
 from flask_cors import CORS
 
 from ppt_data_gen import data_gen
 from ppt_gen import ppt_gen
+from img_gen import RealisticImageGenerator
 
 app = Flask(__name__)
+image_gen = RealisticImageGenerator()
 
 CORS(app)
 
@@ -118,5 +121,22 @@ def generate_ppt():
     return jsonify({"url": downloadUrl}), 200
 
 
+async def fetch_and_process():
+    prompts = []
+    
+    while True:
+        prompt = input("Enter prompt: ")
+        if prompt != "-1":
+            prompts.append(prompt)
+        else:
+            break
+        
+    await image_gen.process_prompts(prompts=prompts)
+
 if __name__ == '__main__':
-    app.run(port=8080, debug=False)
+    asyncio.run(fetch_and_process())
+    print("Test for async")
+        
+    
+    
+
