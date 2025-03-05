@@ -4,7 +4,7 @@ from PIL import Image
 from typing import List, Optional
 import asyncio
 from pathlib import Path
-
+from prompts import get_negative_prompt
 
 class RealisticImageGenerator:
     def __init__(self, model_name="runwayml/stable-diffusion-v1-5", device="cuda", dtype=torch.float16):
@@ -28,7 +28,7 @@ class RealisticImageGenerator:
     async def generate_image(
         self,
         prompt: str,
-        negative_prompt: Optional[str] = "embedding:BadDream, embedding:UnrealisticDream, embedding:FastNegativeV2, embedding:JuggernautNegative-neg, (deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, embedding:negative_hand-neg",
+        negative_prompt: Optional[str] = get_negative_prompt(),
         num_inference_steps: int = 50,
         guidance_scale: float = 8.0,
         height: int = 768,
