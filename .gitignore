@@ -1,4 +1,4 @@
 *.pptx
 __pycache__
-myvenv/
+venv/
 uploads/

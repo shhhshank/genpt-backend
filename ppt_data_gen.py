@@ -5,6 +5,10 @@ import pdfplumber
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
+from img_gen import RealisticImageGenerator
+
+from get_prompts import get_image_guide_prompt
+import asyncio
 
 def create_faiss_index(embeddings):
     dimension = embeddings.shape[1]  # Embedding dimension
@@ -12,8 +16,11 @@ def create_faiss_index(embeddings):
     index.add(embeddings)
     return index
 
+def extract_prompt(raw):
+    content = re.search(r'<<(.+?)>>', raw)
+    return content.group(1) if content else raw
+
 def extract_items(input_string):
-    print(input_string)
     # Find the text inside the << >>
     content = re.search(r'<<(.+?)>>', input_string)
 
@@ -72,9 +79,53 @@ def build_prompt(prompt, context):
     else:
         return prompt
 
+def build_image_prompt(slide_content):
+    """
+    Generates a structured AI art prompt for image generation based on slide content.
+    Ensures precision, adherence to the provided guide, and optimization for Stable Diffusion.
+    """
+    
+    # Preface instructions
+    prefix = """You are an expert in AI-generated art prompt engineering, specializing in designing visuals 
+    for PowerPoint presentations. You strictly follow the provided comprehensive guide on crafting the most 
+    effective AI art prompts—this guide is your absolute reference. Your task is to generate a precise, structured 
+    AI art prompt based on the given slide content. 
+
+    Key Rules:
+    - **Strictly adhere to the guide** for formatting, style, and content structure.
+    - **Only generate one AI art prompt**—no explanations, variations, or extra text.
+    - **Optimize the prompt for Stable Diffusion** to ensure high-quality, relevant images.
+    """
+
+    # Retrieve the AI art guide
+    guide_section = f"{prefix}\n\n-- Start of Comprehensive Guide --\n{get_image_guide_prompt()}\n-- End of Comprehensive Guide --\n"
+
+    # Slide content section
+    slide_section = f"\n-- Start of Slide Content --\n{slide_content}\n-- End of Slide Content --\n"
+
+    # Output guide to enforce single AI art prompt generation
+    output_guide_section = """
+    -- Start of Prompt Output Guide -- 
+    - **Output must contain only the final AI art prompt.**
+    - **The format must strictly follow this structure:**  
+      <<prompt>> example:  
+      <<A stylized portrait of an elderly scientist, wearing glasses, deep in thought, dramatic lighting.>>  
+    -- End of Prompt Output Guide -- 
+    """
+
+    # Combine all sections into the final structured prompt
+    final_prompt = guide_section  + slide_section + output_guide_section
+    
+    print("Final prompt for Image: \n" + final_prompt + "\n ------------")
+    
+    return final_prompt  
+   
+
 def data_gen(params): # Chinese Food
-    llm = Ollama(model="llama3.1:8b",
+    llm = Ollama(model="llama3.2:3b",
                  temperature="0.4")
+    
+    image_gen = RealisticImageGenerator()
     
     options = params['options']
     topic = params['topic']
@@ -88,7 +139,6 @@ def data_gen(params): # Chinese Food
         indices = create_faiss_index(embeddings)
         encoded_query = encode_query(topic)
         context = retrieve_pdf_context(indices, encoded_query, chunks)
-    
     slide_data = {}
 
 
@@ -159,12 +209,16 @@ def data_gen(params): # Chinese Food
         -- End of the text --         
         """, context))
         
+        
+        image_prompt = extract_prompt(llm.invoke(build_image_prompt(cleaned_data)))
+
+        asyncio.run(image_gen.process_prompts([image_prompt]))
+        
+        
         item = {
             'title':subtopic,
             'points': extract_items(cleaned_data)
         }
-
-        print(item)
 
         slide_data['content'].append(item)
         

@@ -4,6 +4,8 @@ import re
 import inspect
 import copy
 import time
+from PIL import Image
+from pptx.util import Inches
 
 from pptx.dml.color import _NoneColor
 
@@ -108,17 +110,17 @@ def replace_text(slide, search_text, replace_text):
     return slide
 
 def get_view_from_text(slide, search_text):
+    """Get paragraph containing exact search text"""
     for shape in slide.shapes:
-        # Check if the shape has a text frame (contains text)
         if not shape.has_text_frame:
             continue
         
-        # Loop through paragraphs and runs within the text frame
         for paragraph in shape.text_frame.paragraphs:
-            print(paragraph.text)
-            if paragraph.text == search_text:
+            # Remove debug print that was causing confusion
+            if paragraph.text.strip() == search_text.strip():
                 return paragraph
     
+    print(f"✗ No shape found with text: {search_text}")
     return None
 
 
@@ -145,21 +147,76 @@ def fill_overview(ppt, overview):
     else:
         print("No paragraph found for: " + title_search)    
 
+def process_image_for_shape(image_path, target_width, target_height):
+    """Process image to match shape dimensions while maintaining aspect ratio"""
+    try:
+        # Convert EMU to pixels (914400 EMU = 1 inch, assuming 96 DPI)
+        target_width_px = int(target_width / 914400 * 96)
+        target_height_px = int(target_height / 914400 * 96)
+        
+        print(f"Processing image to {target_width_px}x{target_height_px} pixels")
+        
+        with Image.open(image_path) as img:
+            # Convert to RGB if necessary
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            print(f"Original image size: {img.width}x{img.height}")
+            
+            # Calculate aspect ratios
+            img_aspect = img.width / img.height
+            target_aspect = target_width_px / target_height_px
+            
+            # Crop image to match target aspect ratio
+            if img_aspect > target_aspect:
+                # Image is wider than needed
+                new_width = int(img.height * target_aspect)
+                left = (img.width - new_width) // 2
+                img = img.crop((left, 0, left + new_width, img.height))
+            else:
+                # Image is taller than needed
+                new_height = int(img.width / target_aspect)
+                top = (img.height - new_height) // 2
+                img = img.crop((0, top, img.width, top + new_height))
+            
+            print(f"After cropping: {img.width}x{img.height}")
+            
+            # Resize to exact dimensions
+            img = img.resize((target_width_px, target_height_px), Image.LANCZOS)
+            
+            print(f"After resizing: {img.width}x{img.height}")
+            
+            # Save to bytes
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG', quality=85)
+            img_byte_arr.seek(0)
+            
+            print("✓ Image processed successfully")
+            return img_byte_arr
+    except Exception as e:
+        print(f"✗ Error processing image {image_path}: {str(e)}")
+        return None
+
 def fill_content(ppt, content):
     slide = ppt.slides[2]
     
+    print(f"Duplicating {len(content) - 1} slides")
     for i in range(len(content) - 1):
         duplicate_slide(ppt, slide, i + 3)
     
     idx = 2
     for item in content:
+        print(f"\nProcessing slide {idx + 1}")
         curr_slide = ppt.slides[idx]
+        
+        # Handle title
         title_para = get_view_from_text(curr_slide, "[slide_top_title_i]")
         if title_para:
             title_para.text = item['title']
+            print(f"✓ Added title: {item['title']}")
         
+        # Handle bullet points
         bullet_para = get_view_from_text(curr_slide, "[slide_i_point_j]")
-
         if bullet_para:
             run_to_dup = bullet_para.runs[0]
             bullet_para.text = ""
@@ -170,11 +227,76 @@ def fill_content(ppt, content):
                 r_dup.text = point
                 if (pt_idx < len(item['points']) - 1):
                     r_dup.text += '\n'
+            print(f"✓ Added {len(item['points'])} points")
         else:
-            print("No paragraph found for: [slide_i_point_j]")
-
+            print("✗ No bullet point placeholder found")
+        
+        # Handle image if present
+        if 'image' in item and item['image']:
+            image_placeholder = None
+            for shape in curr_slide.shapes:
+                if shape.has_text_frame and "[image_i]" in shape.text:
+                    image_placeholder = shape
+                    break
+            
+            if image_placeholder:
+                try:
+                    # Store original properties
+                    left = image_placeholder.left
+                    top = image_placeholder.top
+                    width = image_placeholder.width
+                    height = image_placeholder.height
+                    
+                    # Get the desired z-order before removing the placeholder
+                    desired_z_order = list(curr_slide.shapes).index(image_placeholder)
+                    
+                    # Process and resize image
+                    processed_image = process_image_for_shape(
+                        item['image'],
+                        width,
+                        height
+                    )
+                    
+                    if processed_image:
+                        # Remove the placeholder shape
+                        sp = image_placeholder.element
+                        sp.getparent().remove(sp)
+                        
+                        # Add the new image
+                        picture = curr_slide.shapes.add_picture(
+                            processed_image,
+                            left,
+                            top,
+                            width,
+                            height
+                        )
+                        
+                        # Fix z-order by moving the picture element to the correct position
+                        picture_element = picture.element
+                        spTree = picture_element.getparent()
+                        spTree.remove(picture_element)
+                        
+                        # Get all shape elements
+                        shape_elements = spTree.findall('.//{*}sp') + spTree.findall('.//{*}pic')
+                        
+                        # Insert at the correct position
+                        if desired_z_order < len(shape_elements):
+                            ref_element = shape_elements[desired_z_order]
+                            spTree.insert(list(spTree).index(ref_element), picture_element)
+                        else:
+                            # If it should be on top, append to end
+                            spTree.append(picture_element)
+                        
+                        print(f"✓ Added image to slide {idx + 1} at z-index {desired_z_order}")
+                    else:
+                        print(f"✗ Failed to process image for slide {idx + 1}")
+                except Exception as e:
+                    print(f"✗ Error adding image to slide {idx + 1}: {str(e)}")
+            else:
+                print("✗ No image placeholder found")
+        
         idx += 1
-    
+        print(f"Completed slide {idx}")
 
 def ppt_gen(template_path, slide_data):
     ppt = Presentation(template_path)
@@ -194,4 +316,4 @@ def ppt_gen(template_path, slide_data):
     ppt.save(path)
 
 
-    return  'http://127.0.0.1:8080/' + path 
+    return  '.' + path 
