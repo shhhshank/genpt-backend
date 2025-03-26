@@ -449,7 +449,7 @@ class PPTVideoGenerator:
         try:
             audio_paths = []
             ELEVENLABS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"  # Antoni voice ID
-            API_KEY = "sk_5ca25de453c020da35550ca308a292f90fb45594ad2193a6"
+            API_KEY = "sk_4fb2de074dd4b122bf1e3d5c510f4ea7f33ab5c6fcc600f0"
             
             for script in scripts:
                 try:
