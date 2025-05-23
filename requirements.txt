@@ -1,11 +1,20 @@
-streamlit
-langchain
-langchain-community
-python-pptx
-Flask 
-pymongo 
-flask-pymongo
-flask-cors
-sentence-transformers
-pdfplumber
-faiss-cpu
+--index-url https://download.pytorch.org/whl/cu118
+torch==2.6.0+cu118
+
+--extra-index-url https://pypi.org/simple
+diffusers==0.21.4
+transformers==4.30.2
+sentence-transformers==2.2.2
+google-generativeai==0.8.4
+Pillow==11.1.0
+python-pptx==1.0.2
+pdfplumber==0.11.5
+gtts==2.5.4
+ffmpeg-python==0.2.0
+Flask==2.3.3
+flask-cors==5.0.1
+flask-pymongo==2.3.0
+numpy==1.22.0
+requests==2.32.3
+hume==0.7.9
+aiofiles==23.2.1
